@@ -1,17 +1,17 @@
 (function(){
 'use strict';
-var SUPABASE_CFG=getSupabaseConfig();
-var SUPABASE_URL=SUPABASE_CFG.url||'';
-var SUPABASE_ANON_KEY=SUPABASE_CFG.anonKey||'';
-var SUPABASE_TABLE=SUPABASE_CFG.table||'planning_state';
-var SUPABASE_KEY_COLUMN=SUPABASE_CFG.keyColumn||'id';
-var SUPABASE_DATA_COLUMN=SUPABASE_CFG.dataColumn||'state';
-var SUPABASE_EXTRA_TABLES=SUPABASE_CFG.extraTables||{};
-var SUPABASE_ADMIN_TABLE=SUPABASE_EXTRA_TABLES.admin||null;
-var SUPABASE_USERS_TABLE=SUPABASE_EXTRA_TABLES.users||null;
-var SUPABASE_PASSWORDS_TABLE=SUPABASE_EXTRA_TABLES.passwords||null;
-var SUPABASE_CHOICES_TABLE=SUPABASE_EXTRA_TABLES.choices||null;
-var SUPABASE_AUDIT_TABLE=SUPABASE_EXTRA_TABLES.audit||null;
+var SUPABASE_CFG={};
+var SUPABASE_URL='';
+var SUPABASE_ANON_KEY='';
+var SUPABASE_TABLE='planning_state';
+var SUPABASE_KEY_COLUMN='id';
+var SUPABASE_DATA_COLUMN='state';
+var SUPABASE_EXTRA_TABLES={};
+var SUPABASE_ADMIN_TABLE=null;
+var SUPABASE_USERS_TABLE=null;
+var SUPABASE_PASSWORDS_TABLE=null;
+var SUPABASE_CHOICES_TABLE=null;
+var SUPABASE_AUDIT_TABLE=null;
 var SUPABASE_SAVE_DELAY=800;
 var supabaseClient=null;
 var supabaseSaveTimer=null;
@@ -19,6 +19,9 @@ var skipRemoteSync=false;
 var supabaseChannel=null;
 var supabasePendingState=null;
 var hasInitialized=false;
+var ADMIN_PWD='';
+var ADMIN_PWD_HASH='';
+var ADMIN_ACCESS_ENABLED=false;
 var CLIENT_ID=(function(){
   try{
     if(typeof crypto!=='undefined' && crypto.randomUUID){
@@ -55,10 +58,25 @@ function getSupabaseConfig(){
   window.__SUPABASE_CONFIG__=merged;
   return merged;
 }
+function applySupabaseConfig(cfg){
+  SUPABASE_CFG=cfg||{};
+  SUPABASE_URL=SUPABASE_CFG.url||'';
+  SUPABASE_ANON_KEY=SUPABASE_CFG.anonKey||'';
+  SUPABASE_TABLE=SUPABASE_CFG.table||'planning_state';
+  SUPABASE_KEY_COLUMN=SUPABASE_CFG.keyColumn||'id';
+  SUPABASE_DATA_COLUMN=SUPABASE_CFG.dataColumn||'state';
+  SUPABASE_EXTRA_TABLES=SUPABASE_CFG.extraTables||{};
+  SUPABASE_ADMIN_TABLE=SUPABASE_EXTRA_TABLES.admin||null;
+  SUPABASE_USERS_TABLE=SUPABASE_EXTRA_TABLES.users||null;
+  SUPABASE_PASSWORDS_TABLE=SUPABASE_EXTRA_TABLES.passwords||null;
+  SUPABASE_CHOICES_TABLE=SUPABASE_EXTRA_TABLES.choices||null;
+  SUPABASE_AUDIT_TABLE=SUPABASE_EXTRA_TABLES.audit||null;
+  ADMIN_PWD=typeof SUPABASE_CFG.adminPassword==='string'?SUPABASE_CFG.adminPassword.trim():'';
+  ADMIN_PWD_HASH=typeof SUPABASE_CFG.adminPasswordHash==='string'?SUPABASE_CFG.adminPasswordHash.trim():'';
+  ADMIN_ACCESS_ENABLED=ADMIN_PWD.length>0||ADMIN_PWD_HASH.length>0;
+}
+applySupabaseConfig(getSupabaseConfig());
 var KEY="planning_gardes_state_v080";
-var ADMIN_PWD=typeof SUPABASE_CFG.adminPassword==='string'?SUPABASE_CFG.adminPassword.trim():"";
-var ADMIN_PWD_HASH=typeof SUPABASE_CFG.adminPasswordHash==='string'?SUPABASE_CFG.adminPasswordHash.trim():"";
-var ADMIN_ACCESS_ENABLED=ADMIN_PWD.length>0||ADMIN_PWD_HASH.length>0;
 var DAYS=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
 var MONTHS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 var MONTHS_SHORT=MONTHS.map(function(m){return m.slice(0,4);});
@@ -75,6 +93,20 @@ function toHex(buffer){
     hex+=h;
   }
   return hex;
+}
+
+function escapeHtml(str){
+  if(str==null) return '';
+  return String(str).replace(/[&<>"']/g,function(ch){
+    switch(ch){
+      case '&': return '&amp;';
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '"': return '&quot;';
+      case "'": return '&#39;';
+      default: return ch;
+    }
+  });
 }
 
 function sha256HexSync(message){
@@ -842,6 +874,76 @@ function renderIndispo(role,st,name){
 function renderAdmin(){
   var st=load();var app=document.getElementById("app");app.innerHTML="";
   var card=document.createElement("div");card.className="card";
+  function openDbConfigModal(){
+    if(document.querySelector('.db-config-popup')) return;
+    var canPersist=(typeof window!=='undefined' && !!window.__canPersistSupabaseOverrides__ && typeof window.__setSupabaseOverrides__==='function');
+    var stored=(typeof window!=='undefined' && typeof window.__getSupabaseOverrides__==='function')
+      ? window.__getSupabaseOverrides__() : {};
+    stored=stored||{};
+    var hasStored=false;
+    for(var prop in stored){ if(Object.prototype.hasOwnProperty.call(stored, prop)){ hasStored=true; break; } }
+    var currentCfg=(typeof window!=='undefined' && window.__SUPABASE_CONFIG__)?window.__SUPABASE_CONFIG__:{};
+    var urlVal=stored.url||SUPABASE_URL||currentCfg.url||'';
+    var keyVal=stored.anonKey||SUPABASE_ANON_KEY||currentCfg.anonKey||'';
+    var storageNotice=canPersist
+      ? 'Les valeurs saisies sont conservées localement (stockage du navigateur) et utilisées pour synchroniser le planning avec Baze.'
+      : 'Le stockage local du navigateur est indisponible : impossible d\'enregistrer les identifiants depuis cette interface.';
+    var overlay=document.createElement('div');
+    overlay.className='popup-overlay';
+    overlay.innerHTML='<div class="popup db-config-popup">'
+      +'<h3>Paramètres Baze</h3>'
+      +'<div class="input"><label for="dbConfigUrl">URL Baze</label><input id="dbConfigUrl" type="url" placeholder="https://..."'+(canPersist?'':' disabled')+'></div>'
+      +'<div class="input"><label for="dbConfigKey">Clé API</label><textarea id="dbConfigKey" rows="3" placeholder="Copiez la clé API fournie"'+(canPersist?'':' disabled')+'></textarea></div>'
+      +'<p class="notice">'+storageNotice+'</p>'
+      +'<div class="row"><button class="button" id="dbConfigSave"'+(canPersist?'':' disabled')+'>Enregistrer</button><button class="button ghost" id="dbConfigCancel">Annuler</button><button class="button ghost" id="dbConfigClear"'+((canPersist&&hasStored)?'':' disabled')+'>Effacer</button></div>'
+      +'</div>';
+    document.body.appendChild(overlay);
+    var urlInput=overlay.querySelector('#dbConfigUrl');
+    var keyInput=overlay.querySelector('#dbConfigKey');
+    if(urlInput) urlInput.value=urlVal||'';
+    if(keyInput) keyInput.value=keyVal||'';
+    overlay.addEventListener('click',function(ev){
+      if(ev.target.id==='dbConfigCancel' || ev.target===overlay){
+        if(overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        return;
+      }
+      if(ev.target.id==='dbConfigSave'){
+        if(!canPersist){
+          alert('Stockage local indisponible dans ce navigateur.');
+          return;
+        }
+        var url=urlInput.value.trim();
+        var key=keyInput.value.trim();
+        if(!url || !key){
+          alert('Renseignez l\'URL Baze et la clé API.');
+          return;
+        }
+        var ok=window.__setSupabaseOverrides__({url:url, anonKey:key});
+        if(!ok){
+          alert('Impossible d\'enregistrer les identifiants localement.');
+          return;
+        }
+        alert('Configuration Baze enregistrée. La page va se recharger pour appliquer les paramètres.');
+        location.reload();
+        return;
+      }
+      if(ev.target.id==='dbConfigClear'){
+        if(!canPersist){
+          alert('Stockage local indisponible dans ce navigateur.');
+          return;
+        }
+        if(!confirm('Supprimer les identifiants enregistrés ?')) return;
+        var cleared=window.__setSupabaseOverrides__({});
+        if(!cleared){
+          alert('Impossible de supprimer les identifiants enregistrés.');
+          return;
+        }
+        alert('Les identifiants ont été supprimés. La page va se recharger.');
+        location.reload();
+      }
+    });
+  }
+
   if(!ADMIN_ACCESS_ENABLED && st.sessions._adminOK){
     delete st.sessions._adminOK;
     save(st);
@@ -852,9 +954,15 @@ function renderAdmin(){
       app.appendChild(card);
       return;
     }
-    card.innerHTML='<h2>Admin</h2><div class="row"><div class="input"><label>Mot de passe</label><input id="admPwd" type="password" placeholder="••••••"></div><button class="button" id="admLogin">Valider</button></div>';
+    card.innerHTML='<h2>Admin</h2><div class="row"><div class="input"><label>Mot de passe</label><input id="admPwd" type="password" placeholder="••••••"></div><button class="button" id="admLogin">Valider</button></div>'
+      +'<div class="row"><button class="button ghost" id="configDbBtn">Configurer la base Baze</button></div>'
+      +'<p class="notice">Renseignez l\'URL Baze et la clé API pour activer la synchronisation des données.</p>';
     app.appendChild(card);
     card.addEventListener("click",function(e){
+      if(e.target&&e.target.id==="configDbBtn"){
+        openDbConfigModal();
+        return;
+      }
       if(e.target&&e.target.id==="admLogin"){
         var v=card.querySelector("#admPwd").value;
         verifyAdminPassword(v).then(function(ok){
@@ -871,7 +979,16 @@ function renderAdmin(){
     });
     return;
   }
+    var hasRemote=!!(SUPABASE_URL&&SUPABASE_ANON_KEY);
+    var statusMsg=hasRemote
+      ? 'Connexion Baze configurée vers <code>'+escapeHtml(SUPABASE_URL)+'</code>.'
+      : 'Aucune connexion Baze n\'est configurée. Les données restent enregistrées uniquement en local.';
+    var storageInfo=(typeof window!=='undefined' && window.__canPersistSupabaseOverrides__)
+      ? 'Les identifiants sont stockés localement dans votre navigateur.'
+      : 'Le stockage local du navigateur est indisponible dans ce contexte.';
     card.innerHTML='<h2>Administration</h2>'
+      +'<div class="row"><button class="button" id="configDbBtn">Configurer la base Baze</button></div>'
+      +'<p class="notice">'+statusMsg+'<br>'+storageInfo+'</p>'
       +'<div class="row"><div class="input"><label>Tour actif</label><select id="activeTourSel"></select></div></div>'
       +'<div class="row">'
         +'<div class="input"><label>Mois</label><select id="monthSel"></select></div>'
@@ -1066,6 +1183,10 @@ function renderAdmin(){
     }
   });
   card.addEventListener("click",function(e){
+    if(e.target&&e.target.id==="configDbBtn"){
+      openDbConfigModal();
+      return;
+    }
     var tab=e.target.closest&&e.target.closest('.tour-tab');
     if(tab){
       st.adminTourTab=parseInt(tab.getAttribute('data-tour'),10);
