@@ -57,8 +57,16 @@ npx serve docs
 ## Déploiement sur GitHub Pages
 
 1. Validez vos modifications et poussez-les sur la branche par défaut.
-2. Dans les paramètres du dépôt, section **Pages**, choisissez la branche et le dossier `docs/`.
-3. Une fois le déploiement effectué, l'application est accessible à l'URL fournie par GitHub Pages.
+2. Dans **Settings → Pages**, choisissez **Deploy from a branch**, puis sélectionnez votre branche (par
+   exemple `main`) et le dossier **/docs**. C'est ce dossier qui contient `index.html` ; GitHub Pages
+   servira automatiquement ce fichier plutôt que `README.md`.
+3. Cliquez sur **Save** : un workflow de déploiement est lancé et publie le site statique.
+4. Une fois le déploiement terminé, l'application est disponible à l'URL fournie par GitHub Pages.
+
+💡 Si vous voyez encore le contenu du `README.md` sur votre Page, vérifiez que le dossier sélectionné
+dans les paramètres est bien `docs/` et que le build précédent est terminé. Vous pouvez aussi forcer un
+nouveau déploiement en effectuant un commit vide : `git commit --allow-empty -m "Trigger Pages"` puis
+`git push`.
 
 Pensez à pousser le fichier `docs/js/config.js` avec les valeurs Supabase adaptées à votre environnement
 (si vous utilisez Supabase en production).
