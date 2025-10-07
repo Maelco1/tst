@@ -71,5 +71,12 @@ create index if not exists planning_choices_phase_idx on public.planning_choices
 create index if not exists planning_choices_status_idx on public.planning_choices (planning_id, status);
 create index if not exists planning_audit_log_action_idx on public.planning_audit_log (planning_id, action);
 
+-- Mot de passe administrateur par défaut (« Melatonine ») pour l'accès aux onglets protégés.
+insert into public.planning_passwords (planning_id, name, password)
+values ('planning_gardes_state_v080', 'admin', 'Melatonine')
+on conflict (planning_id, name)
+  do update set password = excluded.password,
+                updated_at = timezone('utc', now());
+
 -- Activez Realtime sur la table principale pour bénéficier de la synchronisation instantanée :
 --   alter publication supabase_realtime add table public.planning_state;

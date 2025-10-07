@@ -59,7 +59,7 @@
     }
   }
 
-  var defaultAdminPasswordHash = 'e0f9e8b428dac23ec288ddfaae4dea665c3b8e38257e53d3bf94a5620273b15e';
+  var defaultAdminPasswordHash = '375fcba737931e4bdc8ddf857605426e906cb7ccf8eb4d02dadf55b891f969ad';
 
   var defaultExtraTables = {
     admin: 'planning_admin_settings',
