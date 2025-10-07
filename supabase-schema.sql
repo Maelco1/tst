@@ -73,3 +73,52 @@ create index if not exists planning_audit_log_action_idx on public.planning_audi
 
 -- Activez Realtime sur la table principale pour bénéficier de la synchronisation instantanée :
 --   alter publication supabase_realtime add table public.planning_state;
+
+-- ---------------------------------------------------------------------------
+-- Jeu de données de démarrage : crée un planning avec un compte administrateur
+-- "admin" (mot de passe « Melatonine ») pour initialiser l'application.
+-- ---------------------------------------------------------------------------
+with base_state as (
+  select jsonb_build_object(
+    'users', jsonb_build_object(
+      'associes', jsonb_build_array('admin'),
+      'remplacants', jsonb_build_array()
+    ),
+    'passwords', jsonb_build_object('admin', 'Melatonine'),
+    'sessions', jsonb_build_object(),
+    'progress', jsonb_build_object(),
+    'draftSelections', jsonb_build_object(),
+    'published', jsonb_build_object(),
+    'audit', jsonb_build_array(),
+    'loginLogs', jsonb_build_array(),
+    'unavailabilities', jsonb_build_object(),
+    'access', jsonb_build_object(
+      'associes', jsonb_build_object('admin', true),
+      'remplacants', jsonb_build_object()
+    ),
+    'tradeEnabled', true,
+    'saisieEnabled', true,
+    'meta', jsonb_build_object(
+      'lastModifiedBy', 'seed-script',
+      'lastModifiedAt', to_jsonb(floor(extract(epoch from now()) * 1000)::bigint)
+    )
+  ) as state
+)
+insert into public.planning_state (id, state)
+select 'planning_gardes_state_v080', state
+from base_state
+on conflict (id) do update
+set state = excluded.state,
+    updated_at = timezone('utc', now());
+
+insert into public.planning_users (planning_id, name, role)
+values ('planning_gardes_state_v080', 'admin', 'associe')
+on conflict (planning_id, name) do update
+set role = excluded.role,
+    updated_at = timezone('utc', now());
+
+insert into public.planning_passwords (planning_id, name, password)
+values ('planning_gardes_state_v080', 'admin', 'Melatonine')
+on conflict (planning_id, name) do update
+set password = excluded.password,
+    updated_at = timezone('utc', now());

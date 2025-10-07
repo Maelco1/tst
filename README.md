@@ -21,7 +21,9 @@ GitHub Pages (source « Docs / » dans les paramètres du dépôt).
 1. Créez un projet Supabase et provisionnez les tables décrites dans `docs/supabase-schema.sql` afin
    de stocker l'état global (`planning_state`) ainsi que les vues dérivées (utilisateurs, mots de
    passe, choix publiés, audit). Le script peut être exécuté tel quel depuis la console SQL de
-   Supabase.
+   Supabase. Il contient également un jeu de données de démarrage qui ajoute un planning par défaut
+   (`planning_gardes_state_v080`) avec un compte administrateur (`admin` / `Melatonine`) que vous
+   pourrez modifier par la suite.
 2. Copiez `docs/js/config.example.js` vers `docs/js/config.js` puis remplissez les valeurs (`url`,
    `anonKey`, `adminPassword`, etc.) avec celles de votre projet. Vous pouvez adapter les noms des
    tables Supabase dans la propriété `extraTables`. Ne versionnez jamais vos secrets dans le dépôt.
