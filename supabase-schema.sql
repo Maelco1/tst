@@ -1,11 +1,18 @@
+-- ============================================================================
 -- Schéma Supabase pour l'application « Planning des gardes ».
--- Toutes les tables vivent dans le schéma public ; le script est idempotent
--- afin de pouvoir être relancé en production sans effet de bord.
+-- ---------------------------------------------------------------------------
+-- Le script est idempotent : il peut être relancé sans casser les données.
+-- Il se charge de créer la structure minimale, d'harmoniser les valeurs par
+-- défaut et d'installer des déclencheurs pour tenir à jour les horodatages.
+-- ============================================================================
 
 begin;
 
 set search_path to public;
 
+-- ---------------------------------------------------------------------------
+-- Tables principales
+-- ---------------------------------------------------------------------------
 create table if not exists public.planning_state (
   id text primary key,
   state jsonb not null,
@@ -27,10 +34,13 @@ create table if not exists public.planning_admin_settings (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+-- ---------------------------------------------------------------------------
+-- Tables dérivées
+-- ---------------------------------------------------------------------------
 create table if not exists public.planning_users (
   planning_id text references public.planning_state(id) on delete cascade,
   name text not null,
-  role text not null check (role in ('associe','remplacant')),
+  role text not null check (role in ('associe', 'remplacant')),
   updated_at timestamptz not null default timezone('utc', now()),
   primary key (planning_id, name)
 );
@@ -72,7 +82,9 @@ create table if not exists public.planning_audit_log (
   primary key (planning_id, idx)
 );
 
--- Harmonise les valeurs par défaut si les tables existaient déjà.
+-- ---------------------------------------------------------------------------
+-- Harmonisation des valeurs par défaut lorsque les tables existent déjà
+-- ---------------------------------------------------------------------------
 alter table if exists public.planning_state
   alter column updated_at set default timezone('utc', now());
 
@@ -103,7 +115,9 @@ alter table if exists public.planning_choices
 alter table if exists public.planning_audit_log
   alter column updated_at set default timezone('utc', now());
 
--- Fonction et déclencheurs pour mettre à jour automatiquement le champ updated_at.
+-- ---------------------------------------------------------------------------
+-- Fonction utilitaire + déclencheurs pour la colonne updated_at
+-- ---------------------------------------------------------------------------
 create or replace function public.set_updated_at()
 returns trigger as $$
 begin
@@ -142,7 +156,9 @@ create trigger trg_planning_audit_log_updated_at
   before update on public.planning_audit_log
   for each row execute function public.set_updated_at();
 
--- Index utilisés par l'application pour filtrer rapidement les données dérivées.
+-- ---------------------------------------------------------------------------
+-- Index utilisés par l'application pour les requêtes filtrées
+-- ---------------------------------------------------------------------------
 create index if not exists planning_choices_phase_idx
   on public.planning_choices (planning_id, phase);
 create index if not exists planning_choices_status_idx
@@ -156,7 +172,9 @@ create index if not exists planning_audit_log_action_idx
 create index if not exists planning_audit_log_actor_idx
   on public.planning_audit_log (planning_id, actor);
 
--- Mot de passe administrateur par défaut (« Melatonine ») pour l'accès aux onglets protégés.
+-- ---------------------------------------------------------------------------
+-- Valeur initiale : mot de passe administrateur « Melatonine »
+-- ---------------------------------------------------------------------------
 insert into public.planning_passwords (planning_id, name, password)
 values ('planning_gardes_state_v080', 'admin', 'Melatonine')
 on conflict (planning_id, name)
@@ -165,5 +183,5 @@ on conflict (planning_id, name)
 
 commit;
 
--- Activez Realtime sur la table principale pour bénéficier de la synchronisation instantanée :
+-- Pour activer la synchronisation temps réel :
 --   alter publication supabase_realtime add table public.planning_state;
