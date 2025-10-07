@@ -14,6 +14,71 @@
     return target;
   }
 
+  var STORAGE_KEY = 'planning_supabase_overrides';
+
+  function hasLocalStorage(){
+    try{
+      return typeof window !== 'undefined' && window.localStorage && typeof window.localStorage.getItem === 'function';
+    }catch(err){
+      return false;
+    }
+  }
+
+  function cleanOverrides(overrides){
+    var allowed = ['url', 'anonKey', 'table', 'keyColumn', 'dataColumn'];
+    var out = {};
+    if(!overrides || typeof overrides !== 'object') return out;
+    for(var i = 0; i < allowed.length; i++){
+      var key = allowed[i];
+      var value = overrides[key];
+      if(typeof value === 'string'){
+        var trimmed = value.trim();
+        if(trimmed) out[key] = trimmed;
+      }
+    }
+    if(overrides.extraTables && typeof overrides.extraTables === 'object'){
+      out.extraTables = assign({}, overrides.extraTables);
+    }
+    return out;
+  }
+
+  function hasKeys(obj){
+    if(!obj || typeof obj !== 'object') return false;
+    for(var key in obj){
+      if(Object.prototype.hasOwnProperty.call(obj, key)) return true;
+    }
+    return false;
+  }
+
+  function readOverrides(){
+    if(!hasLocalStorage()) return {};
+    try{
+      var raw = window.localStorage.getItem(STORAGE_KEY);
+      if(!raw) return {};
+      var parsed = JSON.parse(raw);
+      return assign({}, cleanOverrides(parsed));
+    }catch(err){
+      console.warn('Impossible de lire les identifiants Baze enregistrés', err);
+      return {};
+    }
+  }
+
+  function persistOverrides(overrides){
+    if(!hasLocalStorage()) return false;
+    try{
+      var cleaned = cleanOverrides(overrides);
+      if(hasKeys(cleaned)){
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+      }else{
+        window.localStorage.removeItem(STORAGE_KEY);
+      }
+      return true;
+    }catch(err){
+      console.warn('Impossible d\'enregistrer les identifiants Baze', err);
+      return false;
+    }
+  }
+
   function pickRuntimeEnv(env){
     if(!env) return {};
     var out = {};
@@ -100,6 +165,12 @@
   cfg = assign(cfg, runtimePicked);
   cfg = mergeExtraTables(cfg, runtimePicked.extraTables ? { extraTables: runtimePicked.extraTables } : runtimePicked);
 
+  var storedOverrides = readOverrides();
+  if(hasKeys(storedOverrides)){
+    cfg = assign(cfg, storedOverrides);
+    cfg = mergeExtraTables(cfg, storedOverrides.extraTables ? { extraTables: storedOverrides.extraTables } : storedOverrides);
+  }
+
   if(!cfg.url || !cfg.anonKey){
     console.info('Supabase credentials are not configured; remote persistence is disabled.');
   }
@@ -140,5 +211,12 @@
 
   if(typeof window !== 'undefined'){
     window.__SUPABASE_CONFIG__ = cfg;
+    window.__setSupabaseOverrides__ = function(overrides){
+      return persistOverrides(overrides || {});
+    };
+    window.__getSupabaseOverrides__ = function(){
+      return readOverrides();
+    };
+    window.__canPersistSupabaseOverrides__ = hasLocalStorage();
   }
 })();
